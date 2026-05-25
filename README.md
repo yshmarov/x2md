@@ -38,12 +38,6 @@ X content is increasingly hard to read without an account, hard to archive, and 
 pipx install git+https://github.com/yshmarov/x2md
 ```
 
-**With pip:**
-
-```bash
-pip install git+https://github.com/yshmarov/x2md
-```
-
 **No-install (single file, just clone or curl it down):**
 
 ```bash
