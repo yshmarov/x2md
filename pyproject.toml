@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "x2md"
+version = "0.1.0"
+description = "Convert an X (Twitter) URL into clean markdown — tweets, X Articles, media, and top replies."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [{ name = "Yaroslav Shmarov" }]
+keywords = ["twitter", "x", "markdown", "scraper", "fxtwitter", "nitter", "llm", "agent-tool"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Internet",
+  "Topic :: Text Processing :: Markup :: Markdown",
+  "Topic :: Utilities",
+]
+
+[project.urls]
+Homepage = "https://github.com/yshmarov/x2md"
+Issues = "https://github.com/yshmarov/x2md/issues"
+
+[project.scripts]
+x2md = "x2md:main"
+
+[tool.hatch.build.targets.wheel]
+only-include = ["x2md.py"]
+
+[tool.hatch.build.targets.sdist]
+only-include = ["x2md.py", "README.md", "LICENSE"]
