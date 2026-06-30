@@ -74,6 +74,116 @@ def fetch_tweet(user: str, sid: str) -> dict:
     return data["tweet"]
 
 
+# ---------- Xquik JSON ------------------------------------------------------
+
+
+def first_xquik_tweet(payload: dict) -> dict:
+    """Return the first tweet object from a Xquik tweet or search payload."""
+    for key in ("tweet", "data"):
+        value = payload.get(key)
+        if isinstance(value, dict):
+            return value
+    for key in ("tweets", "results", "data"):
+        value = payload.get(key)
+        if isinstance(value, list) and value:
+            first = value[0]
+            if isinstance(first, dict):
+                return first
+    return payload
+
+
+def xquik_text(value: object, fallback: str = "") -> str:
+    return value if isinstance(value, str) else fallback
+
+
+def xquik_int(value: object) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(float(value.replace(",", "")))
+        except ValueError:
+            return 0
+    return 0
+
+
+def xquik_first(*values: object) -> object:
+    for value in values:
+        if value is not None:
+            return value
+    return None
+
+
+def xquik_author(raw: dict, fallback_user: str) -> dict:
+    author = raw.get("author")
+    if not isinstance(author, dict):
+        author = raw.get("user") if isinstance(raw.get("user"), dict) else {}
+    screen_name = xquik_text(
+        author.get("username")
+        or author.get("screen_name")
+        or raw.get("username")
+        or raw.get("screen_name"),
+        fallback_user,
+    ).lstrip("@")
+    return {
+        "name": xquik_text(author.get("name") or raw.get("name"), screen_name),
+        "screen_name": screen_name,
+    }
+
+
+def xquik_media(raw: dict) -> dict:
+    media = raw.get("media")
+    if isinstance(media, dict):
+        return {
+            "photos": media.get("photos") or [],
+            "videos": media.get("videos") or [],
+        }
+    photos: list[dict] = []
+    videos: list[dict] = []
+    if isinstance(media, list):
+        for item in media:
+            if not isinstance(item, dict):
+                continue
+            url = xquik_text(
+                item.get("url")
+                or item.get("media_url_https")
+                or item.get("preview_image_url")
+            )
+            if not url:
+                continue
+            item_type = xquik_text(item.get("type")).lower()
+            if item_type == "video":
+                videos.append({"url": url})
+            else:
+                photos.append({"url": url})
+    return {"photos": photos, "videos": videos}
+
+
+def tweet_from_xquik(payload: dict, source_url: str, fallback_user: str, sid: str) -> dict:
+    """Convert a Xquik tweet/search payload into the shape x2md renders."""
+    raw = first_xquik_tweet(payload)
+    return {
+        "id": xquik_text(xquik_first(raw.get("id"), raw.get("tweet_id"), raw.get("rest_id")), sid),
+        "url": xquik_text(xquik_first(raw.get("url"), raw.get("source_tweet")), source_url),
+        "text": xquik_text(xquik_first(raw.get("text"), raw.get("full_text"), raw.get("content"))),
+        "created_at": xquik_text(xquik_first(raw.get("created_at"), raw.get("createdAt"))),
+        "replies": xquik_int(xquik_first(raw.get("replyCount"), raw.get("reply_count"), raw.get("replies"))),
+        "author": xquik_author(raw, fallback_user),
+        "media": xquik_media(raw),
+    }
+
+
+def load_xquik_tweet(path: str, source_url: str, fallback_user: str, sid: str) -> dict:
+    payload = json.loads(Path(path).expanduser().read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        sys.exit(f"x2md: Xquik JSON must be an object: {path}")
+    return tweet_from_xquik(payload, source_url, fallback_user, sid)
+
+
 # ---------- Rendering -------------------------------------------------------
 
 
@@ -339,6 +449,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Number of top replies to include (default: 2). Use 0 to skip.",
     )
     p.add_argument("--no-replies", action="store_true", help="Shortcut for --top 0.")
+    p.add_argument(
+        "--xquik-json",
+        metavar="PATH",
+        help="Read a Xquik tweet or search JSON payload instead of fetching via fxtwitter.",
+    )
     p.add_argument("-q", "--quiet", action="store_true", help="Suppress stderr warnings.")
     p.add_argument("-V", "--version", action="version", version=f"x2md {__version__}")
     return p
@@ -349,7 +464,11 @@ def main(argv: list[str] | None = None) -> int:
     top = 0 if args.no_replies else max(0, args.top)
 
     user, sid = parse_url(args.url)
-    tweet = fetch_tweet(user, sid)
+    tweet = (
+        load_xquik_tweet(args.xquik_json, args.url, user, sid)
+        if args.xquik_json
+        else fetch_tweet(user, sid)
+    )
     md, fm = build_markdown(tweet, args.url, top, args.quiet)
 
     if args.output:
